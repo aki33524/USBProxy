@@ -109,17 +109,29 @@ void DeviceProxy_TCP::setConfig(Configuration* fs_cfg, Configuration* hs_cfg, bo
 	__u8* eps=(__u8*)malloc(ep_total);
 	__u8 ep_total_idx=0;
 	for (ifc_idx=0;ifc_idx<ifc_count;ifc_idx++) {
-		Interface* ifc=fs_cfg->get_interface(ifc_idx);
-		__u8 ep_count=ifc->get_endpoint_count();
-		int ep_idx;
-		for (ep_idx=0;ep_idx<ep_count;ep_idx++) {
-			const usb_endpoint_descriptor* ep=ifc->get_endpoint_by_idx(ep_idx)->get_descriptor();
-			eps[ep_total_idx++]=ep->bEndpointAddress;
+		int aifc_idx;
+		int aifc_cnt = fs_cfg->get_interface_alternate_count( ifc_idx);
+		for ( aifc_idx=0; aifc_idx < aifc_cnt; aifc_idx++) {
+			Interface* aifc=fs_cfg->get_interface_alternate(ifc_idx, aifc_idx);
+			int ep_idx;
+			int ep_cnt=aifc->get_endpoint_count();
+			for(ep_idx=0;ep_idx<ep_cnt;ep_idx++) {
+				Endpoint* ep=aifc->get_endpoint_by_idx(ep_idx);
+				const usb_endpoint_descriptor* epd=ep->get_descriptor();
+
+				if ((epd->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_ISOC) {
+					// cerr << "Endpoint " << (unsigned) epd->bEndpointAddress
+					// 		<< " has transfer type isochronous, which is currently not supported." << endl;
+					continue;
+				}
+
+				eps[ep_total_idx++]=epd->bEndpointAddress;
+			}
 		}
 	}
-	int rc=network->open_endpoints(eps,ep_total,250);
+	int rc=network->open_endpoints(eps,ep_total_idx,250);
 	TRACE1(rc)
-	while (rc>0) {rc=network->open_endpoints(eps,ep_total,250);putchar('.');fflush(stdout);TRACE1(rc)}
+	while (rc>0) {rc=network->open_endpoints(eps,ep_total_idx,250);putchar('.');fflush(stdout);TRACE1(rc)}
 	free(eps);
 }
 
